@@ -1,0 +1,207 @@
+rm(list=ls())
+##########################################################################################
+### Functions
+##########################################################################################
+installIfAbsentAndLoad  <-  function(neededVector) {
+  if(length(neededVector) > 0) {
+    for(thispackage in neededVector) {
+      if(! require(thispackage, character.only = T)) {
+        install.packages(thispackage)}
+      require(thispackage, character.only = T)
+    }
+  }
+}
+##############################
+### Load required packages ###
+##############################
+# 
+needed <- c('ISLR')      
+installIfAbsentAndLoad(needed)
+set.seed(1)
+str(Wage)
+# Polynomial Regression and Step Functions
+attach(Wage)
+head(poly(age, 4))
+round(t(poly(age, 4)) %*% poly(age, 4), 4)
+# The Poly() function returns a matrix whose columns are a 
+# orthonormal basis if the space spanned by the original
+# polynomials. That is, each column is a linear orthogonal
+# combination of the variables age, age^2, age^3 and age^4.
+# See GramSchmidtExample.xlsx spreadsheet for an example of
+# how these are construucted.
+fit <- lm(wage ~ poly(age, 4), data=Wage)
+coef(summary(fit))
+# we can also use poly() to obtain age, age^2, age^3 and
+# age^4 directly by using the raw=TRUE argument to the
+# poly() function. Later we see that this does not affect
+# the model in a meaningful way—though the choice of basis
+# clearly affects the coefficient estimates, it does not
+# affect the fitted values obtained.
+head(poly(age, 4, raw=T))
+fit2 <- lm(wage ~ poly(age, 4, raw=T), data=Wage)
+coef(summary(fit2))
+# There are several other equivalent ways of fitting this
+# model. Here we take care to protect terms like age^2 via
+# the wrapper function I() (the ^ symbol has a special
+# meaning in formulas).:
+fit2a <- lm(wage ~ age + I(age ^ 2) + I(age ^ 3) + I(age ^ 4), data=Wage)
+coef(fit2a)
+# or we could use cbind...
+fit2b <- lm(wage ~ cbind(age, age ^ 2, age ^ 3, age ^ 4), data=Wage)
+# We now create a grid of values for age at which we want
+# predictions, and then call the generic predict() function,
+# specifying that we want standard errors as well.
+agelims <- range(age)
+age.grid <- seq(from=agelims[1], to=agelims[2])
+preds <- predict(fit, newdata=list(age=age.grid), se=TRUE)
+se.bands <- cbind(preds$fit + 2 * preds$se.fit, preds$fit - 2 * preds$se.fit)
+# Finally, we plot the data and add the fit from the 
+# degree-4 polynomial. Here the mar and oma arguments to
+# par() allow us to control the margins of the plot
+par(mfrow=c(1, 2),mar=c(4.5, 4.5, 1, 1),oma=c(0, 0, 4, 0))
+plot(age, wage, xlim=agelims, cex=.5, col="darkgrey")
+title("Degree-4 Polynomial", outer=T)
+lines(age.grid, preds$fit, lwd=2, col="blue")
+# The matlines() function plots the columns of one matrix
+# against the columns of another.
+matlines(age.grid, se.bands, lwd=1, col="blue", lty=3)
+# We mentioned earlier that whether or not an orthogonal set
+# of basis functions is produced in the poly() function will
+# not affect the model obtained in a meaningful way. What do
+# we mean by this? The fitted values obtained in either case
+# are identical
+preds2 <- predict(fit2, newdata=list(age=age.grid), se=TRUE)
+max(abs(preds$fit - preds2$fit))
+
+# In performing a polynomial regression we must decide on
+# the degree of the polynomial to use. One way to do this is
+# by using hypothesis tests. 
+
+# We now fit models ranging from linear to a degree-5
+# polynomial and seek to determine the simplest model which
+# is sufficient to explain the relationship between wage and
+# age. 
+
+# We use the anova() function, which performs an analysis of
+# variance (ANOVA, using an F-test) in order to test the
+# null hypothesis that a model M1 is sufficient to
+# explain the data against the alternative hypothesis that a
+# more complex model M2 is required. 
+
+# In order to use the anova() function, M1 and M2 must be
+# nested models: the predictors in M1 must be a subset of
+# the predictors in M2. In this case, we fit five different
+# models and sequentially compare the simpler model to the
+# more complex model.
+
+fit.1 <- lm(wage ~ age, data=Wage)
+fit.2 <- lm(wage ~ poly(age, 2), data=Wage)
+fit.3 <- lm(wage ~ poly(age, 3), data=Wage)
+fit.4 <- lm(wage ~ poly(age, 4), data=Wage)
+fit.5 <- lm(wage ~ poly(age, 5), data=Wage)
+anova(fit.1, fit.2, fit.3, fit.4, fit.5)
+
+# The p-value comparing the linear Model 1 to the quadratic
+# Model 2 is essentially zero (<2e-15), indicating that a
+# linear fit is not sufficient.
+# 
+# Similarly the p-value comparing the quadratic Model 2 to
+# the cubic Model 3 is very low (0.0017), so the quadratic
+# fit is also insufficient.
+# 
+# The p-value comparing the cubic and degree-4 polynomials,
+# Model 3 and Model 4, is approximately 5% while the
+# degree-5 polynomial Model 5 seems unnecessary because its
+# p-value is 0.37.
+# 
+# Hence, either a cubic or a quartic polynomial appear to
+# provide a reasonable fit to the data, but lower- or
+# higher-order models are not justified.
+# 
+# In this case, instead of using the anova() function, we
+# could have obtained these p-values more succinctly by
+# exploiting the fact that poly() creates orthogonal
+# polynomials.
+coef(summary(fit.5))
+# Notice that the p-values are the same, and in fact the
+# square of the t-statistics are equal to the F-statistics
+# from the anova() function; for example:
+(-11.983) ^ 2
+# However, the ANOVA method works whether or not we used
+# orthogonal polynomials; it also works when we have other
+# terms in the model as well. For example, we can use
+# anova() to compare these three models:
+fit.1 <- lm(wage ~ education + age, data=Wage)
+fit.2 <- lm(wage ~ education + poly(age, 2), data=Wage)
+fit.3 <- lm(wage ~ education + poly(age, 3), data=Wage)
+anova(fit.1, fit.2, fit.3)
+
+# As an alternative to using hypothesis tests and ANOVA, we
+# could choose the polynomial degree using cross-validation,
+# as discussed in Chapter 5. 
+
+# Next we consider the task of predicting whether an
+# individual earns more than $250,000 per year. We proceed
+# much as before, except that first we create the
+# appropriate response vector, and then apply the glm()
+# function using family="binomial" in order to fit a 
+# polynomial logistic regression model.
+fit <- glm(I(wage > 250) ~ poly(age, 4), data=Wage, family=binomial)
+# Note that we again use the wrapper I() to create this
+# binary response variable on the fly. The expression
+# wage>250 evaluates to a logical variable containing TRUEs
+# and FALSEs, which glm() coerces to binary by setting the 
+# TRUEs to 1 and the FALSEs to 0. 
+
+# Once again, we make predictions using the predict()
+# function.
+preds <- predict(fit, newdata=list(age=age.grid), se=T)
+
+# However, calculating the confidence intervals is slightly 
+# more involved than in the linear regression case. The 
+# default prediction type for a glm() model is type="link", 
+# which is what we use here. This means we get predictions
+# and standard errors for the logit, not the probabilities
+# themselves. In order to obtain confidence intervals for
+# the probabilities, we must transform these into
+# probabilities, as follows:
+pfit <- exp(preds$fit) / (1 + exp(preds$fit))
+se.bands.logit <- cbind(preds$fit + 2 * preds$se.fit, preds$fit - 2 * preds$se.fit)
+se.bands <- exp(se.bands.logit) / (1 + exp(se.bands.logit))
+# Note that we could have directly computed the 
+# probabilities by selecting the type="response" option in 
+# the predict() function. However, the corresponding
+# confidence intervals would not have been sensible because
+# we would end up with negative probabilities!
+
+# Finally, the right-hand plot from Figure 7.1 was made as
+# follows:
+plot(age, I(wage > 250),xlim=agelims, type="n", ylim=c(0, .2))
+points(jitter(age), I((wage > 250) / 5),cex=.5, pch="|" ,col="darkgrey")
+lines(age.grid, pfit, lwd=2, col="blue")
+matlines(age.grid, se.bands, lwd=1, col="blue", lty=3)
+
+# In order to fit a step function, as discussed in Section
+# 7.2, we use the cut() function.
+table(cut(age, 4))
+fit.step <- lm(wage ~ cut(age, 4), data=Wage)
+coef(summary(fit.step))
+# Here cut() automatically picked the cutpoints at 33.5, 49,
+# and 64.5 years of age. We could also have specified our
+# own cutpoints directly using the breaks option.
+# 
+# The function cut() returns an ordered categorical
+# variable; the lm() function then creates a set of dummy
+# variables for use in the regression. The age<33.5 category
+# is left out, so the intercept coefficient of $94,160 can
+# be interpreted as the average salary for those under 33.5
+# years of age, and the other coefficients can be
+# interpreted as the average additional salary for those in
+# the other age groups.
+# 
+(int <- mean(wage[age <= 33.5]))
+(est1 <- mean(wage[age > 33.5 & age <= 49]) - int)
+(est2 <- mean(wage[age > 49 & age <= 64.5]) - int)
+(est3 <- mean(wage[age > 64.5 & age <= 80.1]) - int)
+# We can produce predictions and plots just as we did in the
+# case of the polynomial fit.
